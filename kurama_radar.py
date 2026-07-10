@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-KURAMA MARKET RADAR v1.00
+KURAMA MARKET RADAR v1.01
 市場歪みレーダー: FX/ゴールド/株価指数の歪みを1枚のマップに可視化する。
 
 - 各銘柄の根拠(MA乖離/長期RSI/マクロ残差/COT/ボラ/相関)を
@@ -128,38 +128,47 @@ UA = {"User-Agent": "Mozilla/5.0 (kurama-radar/1.0)"}
 
 
 # ------------------------------------------------------------------ データ取得
-def fetch_ohlc(ticker: str, period: str = "3y") -> pd.DataFrame | None:
-    """yfinanceから日足OHLCを取得。失敗時はNone。"""
-    try:
-        import yfinance as yf
-        df = yf.Ticker(ticker).history(period=period, interval="1d",
-                                       auto_adjust=False)
-        if df is None or len(df) < MINP:
-            print(f"[warn] {ticker}: データ不足 ({0 if df is None else len(df)}本)")
-            return None
-        df = df.rename(columns=str.lower)[["open", "high", "low", "close"]]
-        df.index = pd.to_datetime(df.index).tz_localize(None).normalize()
-        return df[~df.index.duplicated(keep="last")]
-    except Exception as e:
-        print(f"[warn] {ticker}: 取得失敗 {e}")
-        return None
+def fetch_ohlc(ticker: str, period: str = "3y", retries: int = 3) -> pd.DataFrame | None:
+    """yfinanceから日足OHLCを取得。失敗時はリトライ、それでも駄目ならNone。"""
+    import time
+    for attempt in range(retries):
+        try:
+            import yfinance as yf
+            df = yf.Ticker(ticker).history(period=period, interval="1d",
+                                           auto_adjust=False)
+            if df is None or len(df) < MINP:
+                raise ValueError(f"データ不足 ({0 if df is None else len(df)}本)")
+            df = df.rename(columns=str.lower)[["open", "high", "low", "close"]]
+            df.index = pd.to_datetime(df.index).tz_localize(None).normalize()
+            return df[~df.index.duplicated(keep="last")]
+        except Exception as e:
+            if attempt == retries - 1:
+                print(f"[warn] {ticker}: 取得失敗 {e}")
+                return None
+            time.sleep(2 * (attempt + 1))
+    return None
 
 
-def fetch_fred(series_id: str) -> pd.Series | None:
+def fetch_fred(series_id: str, retries: int = 3) -> pd.Series | None:
     """FREDからCSVを取得(APIキー不要のfredgraphエンドポイント)。"""
-    try:
-        url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
-        r = requests.get(url, headers=UA, timeout=30)
-        r.raise_for_status()
-        df = pd.read_csv(io.StringIO(r.text))
-        df.columns = ["date", "value"]
-        df["date"] = pd.to_datetime(df["date"])
-        s = pd.to_numeric(df["value"], errors="coerce")
-        s.index = df["date"]
-        return s.dropna()
-    except Exception as e:
-        print(f"[warn] FRED {series_id}: 取得失敗 {e}")
-        return None
+    import time
+    url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+    for attempt in range(retries):
+        try:
+            r = requests.get(url, headers=UA, timeout=60)
+            r.raise_for_status()
+            df = pd.read_csv(io.StringIO(r.text))
+            df.columns = ["date", "value"]
+            df["date"] = pd.to_datetime(df["date"])
+            s = pd.to_numeric(df["value"], errors="coerce")
+            s.index = df["date"]
+            return s.dropna()
+        except Exception as e:
+            if attempt == retries - 1:
+                print(f"[warn] FRED {series_id}: 取得失敗 {e}")
+                return None
+            time.sleep(2 * (attempt + 1))
+    return None
 
 
 def fetch_cot(name_contains: str) -> pd.Series | None:
@@ -264,6 +273,19 @@ def rolling_residual(y: pd.Series, x: pd.Series, n: int = 120) -> pd.Series:
 
 
 # ------------------------------------------------------------------ 銘柄ビルド
+def align_ffill(s: pd.Series, idx: pd.DatetimeIndex) -> pd.Series:
+    """飛び飛びの系列(COT週次など)を日足インデックスへ安全に整列する。
+    reindex(method='ffill')は単調増加・重複なしを要求して例外を投げるため、
+    union→ffill→reindexで回避する。"""
+    s = s[~s.index.duplicated(keep="last")].sort_index()
+    try:
+        s.index = pd.to_datetime(s.index).tz_localize(None).normalize()
+    except (TypeError, AttributeError):
+        s.index = pd.to_datetime(s.index)
+    s = s[~s.index.duplicated(keep="last")].sort_index()
+    return s.reindex(s.index.union(idx)).ffill().reindex(idx)
+
+
 def build_symbol(name: str, df: pd.DataFrame, vol_s: pd.Series | None,
                  vol_label: str, macro_s: pd.Series | None, macro_label: str,
                  corr_ref: pd.DataFrame | None, corr_label: str,
@@ -289,21 +311,21 @@ def build_symbol(name: str, df: pd.DataFrame, vol_s: pd.Series | None,
         ("rsi_d", "日足RSI", rsi_d, pct_rank(rsi_d), "num"),
     ]
     if macro_s is not None:
-        resid = rolling_residual(close, macro_s.reindex(close.index).ffill())
+        resid = rolling_residual(close, align_ffill(macro_s, close.index))
         factors.append(("macro", macro_label, resid, pct_rank(resid), "resid"))
     if cot_s is not None:
-        cot_d = cot_s.reindex(close.index, method="ffill")
+        cot_d = align_ffill(cot_s, close.index)
         factors.append(("cot", cot_label, cot_d, pct_rank(cot_d), "int"))
     if corr_ref is not None:
         r1 = close.pct_change()
-        r2 = corr_ref["close"].reindex(close.index).ffill().pct_change()
+        r2 = align_ffill(corr_ref["close"], close.index).pct_change()
         corr = r1.rolling(20).corr(r2)
         factors.append(("corr", corr_label, corr, pct_rank(corr), "corr"))
     if ratio_ref is not None:
-        ratio = close / ratio_ref.reindex(close.index).ffill()
+        ratio = close / align_ffill(ratio_ref, close.index)
         factors.append(("ratio", ratio_label, ratio, pct_rank(ratio), "num4"))
     if vol_s is not None:
-        v = vol_s.reindex(close.index).ffill()
+        v = align_ffill(vol_s, close.index)
         factors.append(("vol", vol_label, v, pct_rank(v), "num"))
     else:
         v = a / close * 100
@@ -568,9 +590,13 @@ def run(demo: bool) -> dict:
             if ref is not None:
                 ratio_s = ref["close"] if isinstance(ref, pd.DataFrame) else ref
                 ratio_label = cfg["ratio"][1]
-        symbols.append(build_symbol(name, ohlc[name], vol_s, vol_label,
-                                    macro_s, macro_label, corr_ref, corr_label,
-                                    cot_s, cot_label, ratio_s, ratio_label))
+        try:
+            symbols.append(build_symbol(name, ohlc[name], vol_s, vol_label,
+                                        macro_s, macro_label, corr_ref,
+                                        corr_label, cot_s, cot_label,
+                                        ratio_s, ratio_label))
+        except Exception as e:
+            print(f"[error] {name}: 計算失敗のためスキップ ({type(e).__name__}: {e})")
 
     # 相関リンク(マップ上の糸)
     links = []
@@ -578,7 +604,7 @@ def run(demo: bool) -> dict:
     for a_name, b_name in LINK_PAIRS:
         if a_name in closes and b_name in closes:
             ra = closes[a_name].pct_change()
-            rb = closes[b_name].reindex(closes[a_name].index).ffill().pct_change()
+            rb = align_ffill(closes[b_name], closes[a_name].index).pct_change()
             c = ra.rolling(20).corr(rb)
             p = pct_rank(c)
             if pd.isna(c.iloc[-1]) or pd.isna(p.iloc[-1]):
