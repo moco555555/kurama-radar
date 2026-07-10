@@ -1,0 +1,396 @@
+# -*- coding: utf-8 -*-
+"""KURAMA MARKET RADAR ダッシュボードHTMLテンプレート v3。
+__DATA__ にJSONを埋め込んで自己完結HTML 1枚として出力する。
+v3: スコアカード列 / 発光バブル+パルス / 推薦ポジションカード / 太バー指紋"""
+
+TEMPLATE = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="900">
+<title>KURAMA MARKET RADAR</title>
+<style>
+:root{--bg:#07090d;--panel:#131a22;--well:#0b0f14;--bd:#26313f;
+--tx:#e6edf3;--tx2:#94a3b3;--tx3:#5c6873;
+--red:#ff5d5d;--redL:#ff8a80;--amber:#ffb020;--teal:#35d0a5;
+--slate:#64748b;--gold:#f0b429}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);padding:18px;max-width:1080px;
+margin:0 auto;font-family:"Segoe UI","Hiragino Sans","Noto Sans JP",
+"Yu Gothic UI",sans-serif}
+header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+margin-bottom:8px}
+h1{font-size:19px;font-weight:700;letter-spacing:.08em}
+h1 span{color:var(--gold)}
+#upd{font-size:12px;color:var(--tx3)}
+#badges{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 12px}
+.badge{font-size:12px;padding:3px 10px;border-radius:99px;
+border:1px solid var(--bd);color:var(--tx2)}
+.badge.on{border-color:var(--gold);color:var(--gold)}
+#cards{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+.hcard{flex:1;min-width:96px;background:var(--panel);border-radius:10px;
+padding:7px 11px;border-left:4px solid var(--slate);cursor:pointer}
+.hcard .nm{font-size:11px;color:var(--tx2)}
+.hcard b{font-size:24px;color:var(--tx2)}
+.hcard.warm{border-left-color:var(--amber)}
+.hcard.warm b{color:var(--amber)}
+.hcard.hot{border-left-color:var(--red);
+box-shadow:0 0 15px rgba(255,93,93,.28)}
+.hcard.hot b{color:var(--red)}
+.hcard.sel{outline:1.5px solid var(--tx)}
+.panel{background:var(--well);border:1px solid #1b232d;border-radius:12px;
+padding:8px;margin-bottom:12px}
+.ptitle{font-size:11px;color:var(--tx3);margin:4px 6px 6px;
+letter-spacing:.08em}
+svg{width:100%;height:auto;display:block}
+svg text{font-family:inherit}
+.bubble{cursor:pointer}
+.reco{background:var(--panel);border:1px solid #3a2020;
+border-left:5px solid var(--red);border-radius:12px;padding:13px;
+box-shadow:0 0 18px rgba(255,93,93,.13);margin-bottom:10px}
+.reco.rankC{border-left-color:var(--tx3);box-shadow:none;
+border-color:var(--bd)}
+.rhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rhead .sym{font-size:16px;font-weight:800}
+.dir{font-size:21px;font-weight:900;letter-spacing:.05em;
+border-radius:8px;padding:2px 13px}
+.dir.SHORT{color:var(--redL);background:#2a1414}
+.dir.LONG{color:var(--teal);background:#0d2620}
+.cond{font-size:12px;color:var(--amber);font-weight:600}
+.rank{font-size:12px;color:var(--tx2);margin-left:auto}
+.rank b{color:var(--amber);font-size:16px}
+.nums{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.num{flex:1;min-width:115px;background:var(--well);border-radius:10px;
+padding:9px;text-align:center}
+.num .lb{font-size:10.5px;color:var(--tx3)}
+.num b{font-size:15px}
+.num .d{font-size:10.5px;color:var(--tx2)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.chip{font-size:11.5px;color:var(--tx);background:#232c38;
+border-radius:99px;padding:4px 11px}
+.chip b{font-weight:700}
+.chip.warn{color:var(--amber);background:#2a2210}
+#skips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+#skips span{font-size:12px;color:var(--tx2);background:var(--panel);
+border-radius:8px;padding:6px 10px}
+#skips span.off{color:var(--tx3);background:#0e141b}
+#fp{background:var(--panel);border:1px solid #1b232d;border-radius:12px;
+padding:13px;margin-bottom:12px}
+#fphead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+margin-bottom:8px}
+#fphead .sym{font-size:16px;font-weight:800}
+#fphead .sc{font-size:23px;font-weight:800}
+#fphead .note{font-size:12px;color:var(--tx2)}
+.frow{display:grid;grid-template-columns:110px minmax(0,1fr) 96px;
+gap:12px;align-items:center;padding:6px 0}
+.frow .lb{font-size:13px;font-weight:600}
+.track{height:15px;background:var(--well);border-radius:8px;
+overflow:hidden}
+.fill{height:100%;border-radius:8px}
+.frow .vl{font-size:11px;color:var(--tx2);text-align:right;
+white-space:nowrap}
+.frow .vl b{font-size:16px}
+#analog{margin-top:10px;background:var(--well);border-radius:8px;
+padding:10px 14px;font-size:13px;color:var(--tx2);line-height:1.8}
+#analog b{color:var(--tx);font-size:15px}
+#analog .hit{color:var(--teal)}
+footer{font-size:11px;color:var(--tx3);line-height:1.8;padding:2px}
+@media(max-width:640px){body{padding:10px}
+.frow{grid-template-columns:88px minmax(0,1fr) 84px;gap:8px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>KURAMA <span>MARKET RADAR</span></h1>
+  <span id="upd"></span>
+</header>
+<div id="badges"></div>
+<div id="cards"></div>
+<div class="panel">
+  <div class="ptitle">歪みマップ — 縦: 歪みスコア / 横: トレンド方向 / 大きさ: ボラレジーム / 残像: 過去5日</div>
+  <svg id="map" viewBox="0 0 920 560" role="img" aria-label="市場歪みマップ"></svg>
+</div>
+<div id="recos"></div>
+<div id="skips"></div>
+<div id="fp">
+  <div id="fphead"></div>
+  <div id="fpbody"></div>
+  <div id="analog"></div>
+</div>
+<footer id="ft"></footer>
+<script>
+const D = __DATA__;
+let cur = D.symbols.length ? D.symbols[0].name : null;
+const NS = "http://www.w3.org/2000/svg";
+
+function sv(tag, at, par){
+  const e = document.createElementNS(NS, tag);
+  for (const k in at) e.setAttribute(k, at[k]);
+  par.appendChild(e);
+  return e;
+}
+function xS(t){ return 70 + (t + 100) / 200 * 810; }
+function yS(v){ return 505 - v / 100 * 455; }
+function tier(sc){
+  return sc >= D.alert_th ? "hot" : (sc >= 50 ? "warm" : "cool");
+}
+function colScore(sc){
+  const t = tier(sc);
+  return t === "hot" ? "var(--red)" : (t === "warm" ? "var(--amber)" : "var(--slate)");
+}
+function gradId(sc){
+  const t = tier(sc);
+  return t === "hot" ? "url(#gr)" : (t === "warm" ? "url(#ga)" : "url(#gs)");
+}
+function fmtP(v){
+  return v >= 1000 ? v.toLocaleString("en-US") : String(v);
+}
+function pctCol(p){
+  if (p >= 0.9 || p <= 0.1)
+    return ["linear-gradient(90deg,#5c2020,#ff5d5d)", "var(--red)"];
+  if (p >= 0.8 || p <= 0.2)
+    return ["linear-gradient(90deg,#5c3a10,#ffb020)", "var(--amber)"];
+  return ["linear-gradient(90deg,#2a3340,#64748b)", "var(--tx2)"];
+}
+function sym(name){ return D.symbols.find(s => s.name === name); }
+function arrow(t){ return t > 15 ? "↑" : (t < -15 ? "↓" : "→"); }
+function sel(name){ cur = name; drawCards(); drawMap(); drawFP(); }
+
+function drawBadges(){
+  document.getElementById("upd").textContent =
+    "更新 " + D.updated + (D.demo ? " (デモデータ)" : "");
+  const b = document.getElementById("badges");
+  b.innerHTML = "";
+  const items = [
+    [D.today.gotobi, "五十日 仲値9:55", true],
+    [D.today.month_end, "月末フロー注意", true],
+    [true, D.today.weekday + "曜", false],
+    [true, "ロンドンFIX 0:00 JST", false],
+  ];
+  for (const [show, label, hotB] of items){
+    if (!show) continue;
+    const d = document.createElement("span");
+    d.className = "badge" + (hotB ? " on" : "");
+    d.textContent = label;
+    b.appendChild(d);
+  }
+}
+
+function drawCards(){
+  const c = document.getElementById("cards");
+  c.innerHTML = "";
+  for (const s of D.symbols){
+    const d = document.createElement("div");
+    d.className = "hcard " + tier(s.score) +
+      (s.name === cur ? " sel" : "");
+    d.innerHTML = '<span class="nm">' + s.name + " " + arrow(s.trend) +
+      "</span><br><b>" + Math.round(s.score) + "</b>";
+    d.addEventListener("click", () => sel(s.name));
+    c.appendChild(d);
+  }
+}
+
+function drawMap(){
+  const svg = document.getElementById("map");
+  svg.innerHTML = "";
+  const defs = sv("defs", {}, svg);
+  defs.innerHTML =
+    '<linearGradient id="gz" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0" stop-color="#ff5d5d" stop-opacity="0.20"/>' +
+    '<stop offset="1" stop-color="#ff5d5d" stop-opacity="0"/></linearGradient>' +
+    '<radialGradient id="gr" cx="0.35" cy="0.3">' +
+    '<stop offset="0" stop-color="#ffb3a8"/>' +
+    '<stop offset="0.55" stop-color="#ff5d5d"/>' +
+    '<stop offset="1" stop-color="#c93b3b"/></radialGradient>' +
+    '<radialGradient id="ga" cx="0.35" cy="0.3">' +
+    '<stop offset="0" stop-color="#ffd98f"/>' +
+    '<stop offset="0.55" stop-color="#ffb020"/>' +
+    '<stop offset="1" stop-color="#c07f0e"/></radialGradient>' +
+    '<radialGradient id="gs" cx="0.35" cy="0.3">' +
+    '<stop offset="0" stop-color="#aeb9c9"/>' +
+    '<stop offset="0.55" stop-color="#64748b"/>' +
+    '<stop offset="1" stop-color="#465264"/></radialGradient>' +
+    '<filter id="gl" x="-80%" y="-80%" width="260%" height="260%">' +
+    '<feGaussianBlur stdDeviation="8"/></filter>';
+  sv("rect", {x:70, y:yS(100), width:810, height:yS(D.alert_th)-yS(100),
+    fill:"url(#gz)", rx:6}, svg);
+  sv("line", {x1:70, y1:yS(D.alert_th), x2:880, y2:yS(D.alert_th),
+    stroke:"var(--red)", "stroke-width":1.5, "stroke-dasharray":"6 5",
+    opacity:0.7}, svg);
+  const zl = sv("text", {x:875, y:yS(100)+18, "text-anchor":"end",
+    "font-size":12, "font-weight":600, fill:"var(--redL)"}, svg);
+  zl.textContent = "反発警戒ゾーン " + D.alert_th + "+";
+  for (const v of [50, 30]){
+    sv("line", {x1:70, y1:yS(v), x2:880, y2:yS(v), stroke:"#1b232d",
+      "stroke-width":1}, svg);
+  }
+  sv("line", {x1:xS(0), y1:yS(100), x2:xS(0), y2:yS(0), stroke:"#1b232d",
+    "stroke-width":1}, svg);
+  let t1 = sv("text", {x:80, y:540, "font-size":12, fill:"var(--tx3)"}, svg);
+  t1.textContent = "\u2190 \u58f2\u308a";
+  let t2 = sv("text", {x:872, y:540, "text-anchor":"end", "font-size":12,
+    fill:"var(--tx3)"}, svg);
+  t2.textContent = "\u8cb7\u3044 \u2192";
+
+  for (const L of D.links){
+    const a = sym(L.a), b = sym(L.b);
+    if (!a || !b) continue;
+    const line = sv("line", {x1:xS(a.trend), y1:yS(a.score),
+      x2:xS(b.trend), y2:yS(b.score),
+      stroke: L.broken ? "var(--red)" : "var(--bd)",
+      "stroke-width": L.broken ? 1.5 : 1}, svg);
+    if (L.broken){
+      line.setAttribute("stroke-dasharray", "6 4");
+      const mx = (xS(a.trend)+xS(b.trend))/2, my = (yS(a.score)+yS(b.score))/2;
+      const tl = sv("text", {x:mx, y:my-6, "text-anchor":"middle",
+        "font-size":11, fill:"var(--red)"}, svg);
+      tl.textContent = "\u76f8\u95a2\u65ad\u88c2 r=" + L.corr;
+    }
+  }
+
+  for (const s of D.symbols){
+    const g = sv("g", {class:"bubble"}, svg);
+    const cx = xS(s.trend), cy = yS(s.score);
+    const tr = s.trail;
+    if (tr.length > 1){
+      const pts = tr.map(p => xS(p[0]) + "," + yS(p[1])).join(" ");
+      sv("polyline", {points:pts, fill:"none", stroke:colScore(s.score),
+        "stroke-width":2, opacity:0.45, "stroke-linecap":"round"}, g);
+      for (let i = 0; i < tr.length - 1; i++){
+        sv("circle", {cx:xS(tr[i][0]), cy:yS(tr[i][1]),
+          r:2.5 + i * 0.7, fill:colScore(s.score),
+          opacity:(0.12 + 0.09 * i).toFixed(2)}, g);
+      }
+    }
+    const r = 11 + s.vol_pct * 14;
+    if (tier(s.score) === "hot"){
+      const halo = sv("circle", {cx:cx, cy:cy, r:r+5,
+        fill:"var(--red)", opacity:0.45, filter:"url(#gl)"}, g);
+      const a1 = sv("animate", {attributeName:"r",
+        values:(r+3)+";"+(r+11)+";"+(r+3), dur:"2.3s",
+        repeatCount:"indefinite"}, halo);
+      const a2 = sv("animate", {attributeName:"opacity",
+        values:"0.45;0.12;0.45", dur:"2.3s",
+        repeatCount:"indefinite"}, halo);
+    }
+    sv("circle", {cx:cx, cy:cy, r:r, fill:gradId(s.score),
+      stroke: s.name === cur ? "var(--tx)" : "rgba(0,0,0,0.45)",
+      "stroke-width": s.name === cur ? 2.5 : 1.5}, g);
+    const sc = sv("text", {x:cx, y:cy+5, "text-anchor":"middle",
+      "font-size":13, "font-weight":800, fill:"#150404"}, g);
+    sc.textContent = Math.round(s.score);
+    const nm = sv("text", {x:cx, y:cy-r-8, "text-anchor":"middle",
+      "font-size":12.5, "font-weight":700,
+      fill: tier(s.score) === "hot" ? "#ffe1de" : "var(--tx2)"}, g);
+    nm.textContent = s.name;
+    g.addEventListener("click", () => sel(s.name));
+  }
+}
+
+function drawRecos(){
+  const box = document.getElementById("recos");
+  const sk = document.getElementById("skips");
+  box.innerHTML = ""; sk.innerHTML = "";
+  for (const s of D.symbols){
+    if (s.reco){
+      const r = s.reco;
+      const d = document.createElement("div");
+      d.className = "reco" + (r.rank === "C" ? " rankC" : "");
+      const chips = s.factors
+        .filter(f => f.pct >= 0.8 || f.pct <= 0.2)
+        .sort((a,b) => Math.abs(b.pct-0.5) - Math.abs(a.pct-0.5))
+        .slice(0, 4)
+        .map((f,i) => '<span class="chip">' + "\u2460\u2461\u2462\u2463"[i] +
+          " " + f.label + " " + f.value +
+          ' <b style="color:' + pctCol(f.pct)[1] + '">' +
+          Math.round(f.pct*100) + "%</b></span>").join("");
+      const an = s.analog && s.analog.n > 0
+        ? '<span class="chip">類似' + s.analog.n + "局面→5日内回帰 " +
+          '<b style="color:var(--teal)">' + s.analog.hit + "%</b></span>"
+        : '<span class="chip warn">\u26a0 類似局面なし</span>';
+      const dem = r.demotes.length
+        ? '<span class="chip warn">\u26a0 ' + r.demotes.join(" / ") +
+          " → 降格</span>" : "";
+      d.innerHTML = '<div class="rhead"><span class="sym">' + s.name +
+        '</span><span class="dir ' + r.dir + '">' + r.dir + "</span>" +
+        '<span class="cond">' + (r.rank === "C" ? "" : "条件付き: ") +
+        r.cond + '</span><span class="rank">ランク <b>' + r.rank +
+        "</b></span></div>" +
+        '<div class="nums">' +
+        '<div class="num"><span class="lb">エントリーゾーン</span><br><b>' +
+        fmtP(r.entry_lo) + "\u301c" + fmtP(r.entry_hi) +
+        '</b><br><span class="d">現在値\u301c0.4ATR引きつけ</span></div>' +
+        '<div class="num"><span class="lb">TP (中期MA)</span><br>' +
+        '<b style="color:var(--teal)">' + fmtP(r.tp) +
+        '</b><br><span class="d">' + s.dev_m_val + "\u00d7ATR分の値幅</span></div>" +
+        '<div class="num"><span class="lb">SL (類似90%tile逆行)</span><br>' +
+        '<b style="color:var(--redL)">' + fmtP(r.sl) +
+        '</b><br><span class="d">耐えられんならロット半分</span></div>' +
+        '<div class="num" style="min-width:80px;flex:0 1 90px">' +
+        '<span class="lb">R / R</span><br><b style="font-size:21px;' +
+        'color:var(--gold)">' + (r.rr ?? "—") + "</b></div></div>" +
+        '<div class="chips">' + chips + an + dem + "</div>";
+      box.appendChild(d);
+    } else {
+      const sp = document.createElement("span");
+      if (s.score >= 50){
+        sp.textContent = s.name + " " + Math.round(s.score) +
+          " → 育成中・推薦なし";
+      } else {
+        sp.className = "off";
+        sp.textContent = s.name + " " + Math.round(s.score) + " → 触らん";
+      }
+      sk.appendChild(sp);
+    }
+  }
+}
+
+function drawFP(){
+  const s = sym(cur);
+  if (!s) return;
+  const h = document.getElementById("fphead");
+  h.innerHTML = '<span class="sym">' + s.name + '</span>' +
+    '<span class="sc" style="color:' + colScore(s.score) + '">歪み ' +
+    s.score + '</span><span class="note">' + s.note +
+    ' / 現在値 ' + fmtP(s.price) + '</span>';
+  const b = document.getElementById("fpbody");
+  b.innerHTML = "";
+  for (const f of s.factors){
+    const [grad, txc] = pctCol(f.pct);
+    const row = document.createElement("div");
+    row.className = "frow";
+    row.innerHTML = '<span class="lb">' + f.label + '</span>' +
+      '<div class="track"><div class="fill" style="width:' +
+      (f.pct * 100).toFixed(1) + '%;background:' + grad + '"></div></div>' +
+      '<span class="vl">' + f.value + ' <b style="color:' + txc + '">' +
+      Math.round(f.pct * 100) + '%</b></span>';
+    b.appendChild(row);
+  }
+  const a = document.getElementById("analog");
+  const an = s.analog;
+  if (an && an.n > 0){
+    a.innerHTML = '類似局面 (類似度' + D.sim_th + '%以上、過去2年) — 該当 <b>' +
+      an.n + '回</b> → 5営業日以内に中期MAへ回帰 <b class="hit">' + an.hit +
+      '%</b>' + (an.avg_days ? ' / 平均到達 <b>' + an.avg_days + '日</b>' : '') +
+      ' / 逆行 平均 <b>' + an.adverse + '</b>・90%tile <b>' +
+      (an.adverse90 ?? "—") + '×ATR</b>';
+  } else {
+    a.innerHTML = '類似局面: 過去2年に類似度' + D.sim_th +
+      '%以上の指紋なし(現在の歪みは稀な形状)';
+  }
+}
+
+document.getElementById("ft").innerHTML =
+  '推薦は「歪みスコア×類似局面統計×手法ルール(角度/FT/RSI)」から機械生成。' +
+  '執行判断は必ずチャートで最終確認。統計は過去実績であり将来の結果を保証するものではない。' +
+  'データ: Yahoo Finance / FRED / CFTC COT。15分ごとに自動リロード。';
+
+drawBadges();
+drawCards();
+drawMap();
+drawRecos();
+drawFP();
+</script>
+</body>
+</html>"""
